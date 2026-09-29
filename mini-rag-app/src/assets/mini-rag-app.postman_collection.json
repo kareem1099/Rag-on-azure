@@ -9,25 +9,162 @@
 			"key": "api",
 			"value": "http://127.0.0.1:5000",
 			"type": "string"
+		},
+		{
+			"key": "project_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "file_id",
+			"value": "",
+			"type": "string"
 		}
 	],
 	"item": [
 		{
-			"name": "healthy",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{api}}/healthy",
-					"host": [
-						"{{api}}"
-					],
-					"path": [
-						"healthy"
-					]
+			"name": "Base",
+			"item": [
+				{
+					"name": "healthy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/api/v1/healthy",
+							"host": [ "{{api}}" ],
+							"path": [ "api", "v1", "healthy" ]
+						}
+					},
+					"response": []
 				}
-			},
-			"response": []
+			]
+		},
+		{
+			"name": "Data",
+			"item": [
+				{
+					"name": "upload",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/upload/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "upload", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "process",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"file_id\": \"{{file_id}}\",\n    \"chunk_size\": 350,\n    \"overlap_size\": 50,\n    \"do_reset\": 0\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{api}}/process/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "process", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "NLP",
+			"item": [
+				{
+					"name": "index push",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"do_reset\": 0\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{api}}/api/v1/nlp/index/push/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "api", "v1", "nlp", "index", "push", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "index info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/api/v1/nlp/index/info/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "api", "v1", "nlp", "index", "info", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "index search",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"إيه اللي بيتكلم عنه الملف؟\",\n    \"limit\": 5\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{api}}/api/v1/nlp/index/search/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "api", "v1", "nlp", "index", "search", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "index answer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"إيه اللي بيتكلم عنه الملف؟\",\n    \"limit\": 5\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{api}}/api/v1/nlp/index/answer/{{project_id}}",
+							"host": [ "{{api}}" ],
+							"path": [ "api", "v1", "nlp", "index", "answer", "{{project_id}}" ]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	]
 }

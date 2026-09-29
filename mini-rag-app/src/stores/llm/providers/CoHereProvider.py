@@ -1,7 +1,9 @@
 from ..LLMInterface import LLMInterface
 from ..LLMEnums import CoHereEnums, DocumentTypeEnum
 import cohere
+import httpx
 import logging
+import re
 
 
 class CoHereProvider(LLMInterface):
@@ -25,6 +27,7 @@ class CoHereProvider(LLMInterface):
         self.client = cohere.Client(api_key=self.api_key)
 
         self.enums = CoHereEnums
+        self.supports_grounded_generation = True
         self.logger = logging.getLogger(__name__)
 
     def set_generation_model(self, model_id: str):
@@ -51,12 +54,10 @@ class CoHereProvider(LLMInterface):
         max_output_tokens = max_output_tokens if max_output_tokens else self.default_generation_max_output_tokens
         temperature = temperature if temperature else self.default_generation_temperature
 
-        
-
         response = self.client.chat(
             model=self.generation_model_id,
             chat_history=chat_history,
-            message=self.process_text(prompt),
+            message=prompt,
             temperature=temperature,
             max_tokens=max_output_tokens,
         )
@@ -67,7 +68,87 @@ class CoHereProvider(LLMInterface):
 
         return response.text
 
-    def embed_text(self, text: str, document_type: str = None):
+    def generate_grounded(self, query: str, documents: list, system_prompt: str = None,
+                          max_output_tokens: int = None, temperature: float = None,
+                          frequency_penalty: float = None, presence_penalty: float = None):
+
+        if not self.client:
+            self.logger.error("CoHere client was not set")
+            return None
+
+        if not self.generation_model_id:
+            self.logger.error("Generation model for CoHere was not set")
+            return None
+
+        max_output_tokens = max_output_tokens if max_output_tokens else self.default_generation_max_output_tokens
+        temperature = temperature if temperature else self.default_generation_temperature
+
+        payload = {
+            "model": self.generation_model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            "documents": [
+                {
+                    "id": doc["id"],
+                    "data": {"title": doc["title"], "snippet": doc["text"]},
+                }
+                for doc in documents
+            ],
+            "temperature": temperature,
+            "max_tokens": max_output_tokens,
+        }
+        if frequency_penalty is not None:
+            payload["frequency_penalty"] = frequency_penalty
+        if presence_penalty is not None:
+            payload["presence_penalty"] = presence_penalty
+
+        try:
+            with httpx.Client(timeout=180) as client:
+                response = client.post(
+                    "https://api.cohere.com/v2/chat",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                response_data = response.json()
+        except httpx.HTTPError as error:
+            self.logger.error("Error while generating grounded text with Cohere: %s", error)
+            return None
+
+        message = response_data.get("message") or {}
+        content = message.get("content") or []
+        answer_text = "\n".join(
+            block.get("text", "") for block in content if block.get("type") == "text"
+        )
+        if not answer_text:
+            self.logger.error("Error while generating grounded text with CoHere")
+            return None
+
+        citations = [
+            {
+                "start": citation.get("start", 0),
+                "end": citation.get("end", 0),
+                "text": citation.get("text", ""),
+                "document_ids": [
+                    source["id"]
+                    for source in citation.get("sources", [])
+                    if source.get("type") == "document" and source.get("id")
+                ],
+            }
+            for citation in message.get("citations", [])
+        ]
+
+        return {
+            "text": answer_text,
+            "citations": citations,
+            "finish_reason": response_data.get("finish_reason"),
+            "citation_markup_complete": True,
+        }
+
+    def embed_text(self, text, document_type: str = None):
+        # text: نص واحد أو List[str] — بترجّع لستة vectors دايماً
 
         if not self.client:
             self.logger.error("CoHere client was not set")
@@ -81,9 +162,12 @@ class CoHereProvider(LLMInterface):
         if document_type == DocumentTypeEnum.QUERY.value:
             input_type = CoHereEnums.QUERY.value
 
+        texts = text if isinstance(text, list) else [text]
+        texts = [self.process_text(t) for t in texts]
+
         response = self.client.embed(
             model=self.embedding_model_id,
-            texts=[self.process_text(text)],
+            texts=texts,
             input_type=input_type,
             embedding_types=["float"],
         )
@@ -92,10 +176,10 @@ class CoHereProvider(LLMInterface):
             self.logger.error("Error while embedding text with CoHere")
             return None
 
-        return response.embeddings.float[0]
+        return response.embeddings.float
 
     def construct_prompt(self, prompt: str, role: str):
         return {
             "role": role,
-            "text": self.process_text(prompt),
+            "text": prompt,
         }

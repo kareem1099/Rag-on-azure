@@ -17,7 +17,14 @@ class LLMInterface(ABC):
         pass
 
     @abstractmethod
-    def embed_text(self, text: str, document_type: str = None):
+    def generate_grounded(self, query: str, documents: list, system_prompt: str = None,
+                          max_output_tokens: int = None, temperature: float = None,
+                          frequency_penalty: float = None, presence_penalty: float = None):
+        pass
+
+    @abstractmethod
+    def embed_text(self, text, document_type: str = None):
+        # text: str أو List[str] — بيرجّع لستة vectors دايماً
         pass
 
     @abstractmethod

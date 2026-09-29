@@ -19,8 +19,6 @@ services:
     ports:
       - "8081:8081"
     environment:
-      # ⬇️ mongodb = اسم الخدمة فوق، و 27017 المنفذ الداخلي (مش 27007)
-      #    ده شغل شبكة backend — الخدمات بتنادي بعض بالاسم
       - ME_CONFIG_MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
       - ME_CONFIG_BASICAUTH_USERNAME=${ME_USERNAME:-admin}
       - ME_CONFIG_BASICAUTH_PASSWORD=${ME_PASSWORD:-admin}
@@ -30,8 +28,22 @@ services:
       - mongodb
     restart: unless-stopped
 
+  pgvector:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: pgvector
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - backend
+    restart: always
+
 networks:
   backend:
 
 volumes:
   mongodata:
+  pgvector_data:
