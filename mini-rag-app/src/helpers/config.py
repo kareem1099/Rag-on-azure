@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -7,8 +8,11 @@ class Settings(BaseSettings):
     FILE_ALLOWED_EXTENSIONS: list
     FILE_MAX_SIZE: int
     FILE_DEFAULT_CHUNK_SIZE: int
-    MONGODB_URL: str
-    MONGODB_DATABASE: str
+    POSTGRES_USERNAME: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
+    POSTGRES_MAIN_DATABASE: str
 
     GENERATION_BACKEND: str
     EMBEDDING_BACKEND: str
@@ -16,6 +20,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = None
     OPENAI_API_URL: str = None
     COHERE_API_KEY: str = None
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_THINKING_BUDGET: Optional[int] = None
+    GEMINI_FALLBACK_MODELS: Optional[str] = None
+    GENERATION_FALLBACK_BACKEND: Optional[str] = None
+    GENERATION_FALLBACK_MODEL_ID: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1"
     QDRANT_API_KEY: str = None
 
     GENERATION_MODEL_ID: str = None
@@ -28,6 +39,23 @@ class Settings(BaseSettings):
     VECTOR_DB_BACKEND: str
     VECTOR_DB_PATH: str
     VECTOR_DB_DISTANCE_METHOD: str = None
+    VECTOR_DB_PGVEC_INDEX_THRESHOLD: int = 100
+
+    GROUNDED_MAX_OUTPUT_TOKENS: int = 1200
+    GROUNDED_FREQUENCY_PENALTY: float = 0.6
+    GROUNDED_PRESENCE_PENALTY: float = 0.3
+    GROUNDED_TEMPERATURE: float = 0.2
+    GROUNDING_MIN_RATIO: float = 0.1
+    CONTEXT_WINDOW_CHILDREN: Optional[int] = None
+    CONTEXT_MAX_CHILDREN_PER_PARENT: Optional[int] = None
+
+    RERANK_BACKEND: Optional[str] = None
+    RERANK_API_URL: Optional[str] = None
+    RERANK_API_KEY: Optional[str] = None
+    RERANK_MODEL_ID: Optional[str] = None
+    RERANK_CANDIDATES: int = 20
+    RERANK_TARGET: str = "parent"
+    RERANK_MAX_CHARACTERS: int = 4000
 
     PRIMARY_LANG: str = "en"
     DEFAULT_LANG: str = "en"

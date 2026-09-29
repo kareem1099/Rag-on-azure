@@ -1,4 +1,5 @@
-from helpers.config import get_settings, Settings
+from helpers.config import get_settings
+
 
 class BaseDataModel:
 

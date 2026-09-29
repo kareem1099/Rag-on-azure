@@ -1,3 +1,8 @@
-from .project import Project
-from .data_chunck import DataChunk, RetrievedDocument
-from .asset import Asset
+from models.dbschemas.minirag.schemes import (
+    SQLAlchemyBase,
+    Project,
+    Asset,
+    Parent,
+    DataChunk,
+    RetrievedDocument,
+)
