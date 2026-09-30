@@ -4,6 +4,7 @@ from models.ProjectModel import ProjectModel
 from models.DataChunckmodel import ChunkModel
 from models import ResponseSignal
 from controllers.NLPController import NLPController
+from utils.metrics import record_rag_answer
 from .scheams.nlp import PushRequest, SearchRequest
 import logging
 
@@ -156,6 +157,7 @@ async def answer_rag(request: Request, project_id: int, search_request: SearchRe
     )
 
     if not answer:
+        record_rag_answer(model="none", outcome="error")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"signal": ResponseSignal.RAG_ANSWER_ERROR.value})

@@ -1,5 +1,6 @@
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import FastAPI, Request, Response
+from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware
 import time
 
@@ -11,6 +12,13 @@ REQUEST_LATENCY = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 20, 30, 45, 60, 90, 120),
 )
 
+RAG_ANSWERS = Counter("rag_answers_total", "RAG answers by model and outcome", ["model", "outcome"])
+RAG_UNVERIFIED_QUOTES = Counter("rag_unverified_quotes_total", "Quotes not found in the retrieved documents")
+RAG_UNVERIFIED_ATTRIBUTIONS = Counter("rag_unverified_attributions_total", "Attributions not matching the retrieved documents")
+
+RAG_OUTCOMES = ("answered", "refused", "incomplete")
+INITIAL_STATUSES = ("200", "400", "401", "422", "500")
+
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
 
@@ -21,7 +29,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time
-        endpoint = request.url.path
+
+        route = request.scope.get("route")
+        endpoint = getattr(route, "path", None) or "unmatched"
 
         REQUEST_LATENCY.labels(method=request.method, endpoint=endpoint).observe(duration)
         REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, status=response.status_code).inc()
@@ -35,3 +45,26 @@ def setup_metrics(app: FastAPI):
     @app.get("/metrics", include_in_schema=False)
     def metrics():
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def initialize_metrics(app: FastAPI, model_ids: list):
+    for route in app.routes:
+        if not isinstance(route, APIRoute) or route.path == "/metrics":
+            continue
+        for method in route.methods:
+            REQUEST_LATENCY.labels(method=method, endpoint=route.path)
+            for status in INITIAL_STATUSES:
+                REQUEST_COUNT.labels(method=method, endpoint=route.path, status=status)
+
+    for model_id in model_ids:
+        for outcome in RAG_OUTCOMES:
+            RAG_ANSWERS.labels(model=model_id, outcome=outcome)
+    RAG_ANSWERS.labels(model="none", outcome="error")
+
+
+def record_rag_answer(model: str, outcome: str, unverified_quotes: int = 0, unverified_attributions: int = 0):
+    RAG_ANSWERS.labels(model=model or "unknown", outcome=outcome).inc()
+    if unverified_quotes:
+        RAG_UNVERIFIED_QUOTES.inc(unverified_quotes)
+    if unverified_attributions:
+        RAG_UNVERIFIED_ATTRIBUTIONS.inc(unverified_attributions)

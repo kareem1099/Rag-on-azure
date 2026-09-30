@@ -11,7 +11,7 @@ from stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
 from stores.llm.templates.template_parser import TemplateParser
 from stores.rerank.RerankProviderFactory import RerankProviderFactory
 from helpers.security import verify_api_key
-from utils.metrics import setup_metrics
+from utils.metrics import setup_metrics, initialize_metrics
 
 
 app = FastAPI()
@@ -63,6 +63,10 @@ async def startup_span():
         language=settings.PRIMARY_LANG,
         default_language=settings.DEFAULT_LANG,
     )
+
+    model_ids = [settings.GENERATION_MODEL_ID, settings.GENERATION_FALLBACK_MODEL_ID]
+    model_ids += [m.strip() for m in (settings.GEMINI_FALLBACK_MODELS or "").split(",")]
+    initialize_metrics(app, [m for m in model_ids if m])
 
 
 @app.on_event("shutdown")

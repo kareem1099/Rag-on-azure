@@ -112,6 +112,18 @@ services:
       - backend
     restart: always
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate --url http://nginx:80
+    depends_on:
+      - nginx
+    networks:
+      - backend
+    restart: unless-stopped
+    profiles:
+      - tunnel
+
 networks:
   backend:
     driver: bridge

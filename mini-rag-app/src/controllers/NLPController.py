@@ -3,6 +3,7 @@ from models.dbschemas import Project, DataChunk, RetrievedDocument
 from stores.llm.LLMEnums import DocumentTypeEnum
 from stores.rerank.RerankEnums import RerankTargetEnums
 from helpers.arabic_text import build_keyword_query, normalize_arabic
+from utils.metrics import record_rag_answer
 from typing import List
 import json
 import re
@@ -279,6 +280,19 @@ class NLPController(BaseController):
             "citation_markup_complete": citation_markup_complete,
             "documents": [{"id": doc["id"], "title": doc["title"]} for doc in grounded_documents],
         }
+
+        if answer.strip() == refusal_message.strip():
+            outcome = "refused"
+        elif not complete:
+            outcome = "incomplete"
+        else:
+            outcome = "answered"
+        record_rag_answer(
+            model=grounding["model"],
+            outcome=outcome,
+            unverified_quotes=len(unverified_quotes),
+            unverified_attributions=len(unverified_attributions),
+        )
 
         return answer, query, system_prompt, grounding
 
