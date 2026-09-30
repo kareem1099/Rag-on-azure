@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -13,6 +14,9 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_MAIN_DATABASE: str
+    POSTGRES_SSL: bool = False
+
+    APP_API_KEY: Optional[str] = None
 
     GENERATION_BACKEND: str
     EMBEDDING_BACKEND: str
@@ -61,7 +65,7 @@ class Settings(BaseSettings):
     DEFAULT_LANG: str = "en"
 
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
         env_file_encoding = "utf-8"
 
 

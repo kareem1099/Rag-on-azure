@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from urllib.parse import quote_plus
 from routes.base import base_router
 from routes.data import data_router
 from routes.nlp import nlp_router
@@ -9,12 +10,15 @@ from stores.llm.LLMProviderFactory import LLMProviderFactory
 from stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
 from stores.llm.templates.template_parser import TemplateParser
 from stores.rerank.RerankProviderFactory import RerankProviderFactory
+from helpers.security import verify_api_key
+from utils.metrics import setup_metrics
 
 
 app = FastAPI()
+setup_metrics(app)
 app.include_router(base_router)
-app.include_router(data_router)
-app.include_router(nlp_router)
+app.include_router(data_router, dependencies=[Depends(verify_api_key)])
+app.include_router(nlp_router, dependencies=[Depends(verify_api_key)])
 
 
 @app.on_event("startup")
@@ -22,11 +26,14 @@ async def startup_span():
     settings = get_settings()
 
     postgres_conn = (
-        f"postgresql+asyncpg://{settings.POSTGRES_USERNAME}:{settings.POSTGRES_PASSWORD}"
+        f"postgresql+asyncpg://{settings.POSTGRES_USERNAME}:{quote_plus(settings.POSTGRES_PASSWORD)}"
         f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_MAIN_DATABASE}"
     )
 
-    app.db_engine = create_async_engine(postgres_conn)
+    app.db_engine = create_async_engine(
+        postgres_conn,
+        connect_args={"ssl": "require"} if settings.POSTGRES_SSL else {},
+    )
     app.db_client = sessionmaker(
         app.db_engine, class_=AsyncSession, expire_on_commit=False
     )
