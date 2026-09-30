@@ -1,0 +1,8 @@
+**/.env
+**/.env.*
+**/__pycache__
+docker/mongodb
+docker/env
+docs
+*.dump
+src/assets/files
