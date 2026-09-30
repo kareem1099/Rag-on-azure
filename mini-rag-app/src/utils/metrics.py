@@ -4,12 +4,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import time
 
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP Requests", ["method", "endpoint", "status"])
-REQUEST_LATENCY = Histogram("http_request_duration_seconds", "HTTP Request Latency", ["method", "endpoint"])
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "HTTP Request Latency",
+    ["method", "endpoint"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 20, 30, 45, 60, 90, 120),
+)
 
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/metrics":
+            return await call_next(request)
+
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time

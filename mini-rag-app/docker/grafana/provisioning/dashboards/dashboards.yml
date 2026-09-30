@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: minirag
+    folder: MiniRAG
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
