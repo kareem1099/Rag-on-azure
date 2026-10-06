@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     POSTGRES_SSL: bool = False
 
     APP_API_KEY: Optional[str] = None
+    # Comma-separated browser origins allowed to call the API (e.g. the GitHub Pages site).
+    CORS_ALLOWED_ORIGINS: Optional[str] = "https://kareem1099.github.io"
     METRICS_TOKEN: Optional[str] = None
 
     GENERATION_BACKEND: str

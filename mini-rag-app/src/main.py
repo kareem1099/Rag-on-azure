@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from urllib.parse import quote_plus
 from routes.base import base_router
 from routes.data import data_router
@@ -16,6 +17,16 @@ from utils.metrics import setup_metrics, initialize_metrics
 
 app = FastAPI()
 setup_metrics(app)
+
+# Added last so it is the outermost middleware and answers browser preflight (OPTIONS) requests.
+cors_origins = [o.strip() for o in (get_settings().CORS_ALLOWED_ORIGINS or "").split(",") if o.strip()]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-API-Key"],
+    )
 app.include_router(base_router)
 app.include_router(data_router, dependencies=[Depends(verify_api_key)])
 # The answer endpoint is public; the other NLP endpoints check the API key per route.

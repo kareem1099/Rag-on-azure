@@ -13,6 +13,8 @@ POSTGRES_MAIN_DATABASE="minirag"
 POSTGRES_SSL=false
 
 APP_API_KEY="<random-long-string>"
+# Comma-separated origins allowed to call the API from a browser (no trailing slash, no path)
+CORS_ALLOWED_ORIGINS="https://kareem1099.github.io"
 # Optional: when set, /metrics requires "Authorization: Bearer <token>" (on Azure deploy.sh generates one if empty)
 METRICS_TOKEN=""
 
