@@ -18,7 +18,8 @@ app = FastAPI()
 setup_metrics(app)
 app.include_router(base_router)
 app.include_router(data_router, dependencies=[Depends(verify_api_key)])
-app.include_router(nlp_router, dependencies=[Depends(verify_api_key)])
+# The answer endpoint is public; the other NLP endpoints check the API key per route.
+app.include_router(nlp_router)
 
 
 @app.on_event("startup")

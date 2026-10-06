@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from models.ProjectModel import ProjectModel
 from models.DataChunckmodel import ChunkModel
 from models import ResponseSignal
 from controllers.NLPController import NLPController
 from utils.metrics import record_rag_answer
+from helpers.security import verify_api_key
 from .scheams.nlp import PushRequest, SearchRequest
 import logging
 
@@ -27,7 +28,7 @@ def build_nlp_controller(request: Request):
     )
 
 
-@nlp_router.post("/index/push/{project_id}")
+@nlp_router.post("/index/push/{project_id}", dependencies=[Depends(verify_api_key)])
 async def index_project(request: Request, project_id: int, push_request: PushRequest):
 
     project_model = await ProjectModel.create_instance(db_client=request.app.db_client)
@@ -87,7 +88,7 @@ async def index_project(request: Request, project_id: int, push_request: PushReq
     })
 
 
-@nlp_router.get("/index/info/{project_id}")
+@nlp_router.get("/index/info/{project_id}", dependencies=[Depends(verify_api_key)])
 async def get_project_index_info(request: Request, project_id: int):
 
     project_model = await ProjectModel.create_instance(db_client=request.app.db_client)
@@ -107,7 +108,7 @@ async def get_project_index_info(request: Request, project_id: int):
     })
 
 
-@nlp_router.post("/index/search/{project_id}")
+@nlp_router.post("/index/search/{project_id}", dependencies=[Depends(verify_api_key)])
 async def search_index(request: Request, project_id: int, search_request: SearchRequest):
 
     project_model = await ProjectModel.create_instance(db_client=request.app.db_client)
