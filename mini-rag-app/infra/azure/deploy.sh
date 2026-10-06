@@ -31,7 +31,7 @@ trap 'rm -f "$PARAMS_FILE"' EXIT
 build_params() {
     local deploy_apps="$1"
     python3 - "$ENV_DIR" "$deploy_apps" "$IMAGE_TAG" "$LOCATION" > "$PARAMS_FILE" <<'PY'
-import base64, json, re, secrets, sys
+import json, re, secrets, sys
 
 env_dir, deploy_apps, image_tag, location = sys.argv[1:5]
 
@@ -52,12 +52,24 @@ def read_env(path):
 
 app = read_env(f"{env_dir}/.env.app")
 
+# Set by main.bicep from the Azure resources; ignored if present in .env.app.
+managed_keys = {"POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USERNAME", "POSTGRES_PASSWORD",
+                "POSTGRES_MAIN_DATABASE", "POSTGRES_SSL", "METRICS_TOKEN"}
 secret_pattern = re.compile(r"_(KEY|PASSWORD|TOKEN|SECRET)$")
-# Values are base64-encoded because ARM treats any string starting with "[" (e.g. the JSON list
-# in FILE_ALLOWED_EXTENSIONS) as a template expression; main.bicep decodes them.
-b64 = lambda v: base64.b64encode(v.encode("utf-8")).decode("ascii")
-app_env = {k: b64(v) for k, v in app.items() if not secret_pattern.search(k)}
-app_secrets = {k: b64(v) for k, v in app.items() if secret_pattern.search(k) and v}
+
+# The env/secret arrays are built here rather than with Bicep loops: ARM re-evaluates loop
+# output that starts with "[" (e.g. FILE_ALLOWED_EXTENSIONS) as a template expression.
+app_env, app_secrets = [], []
+for key, value in app.items():
+    if key in managed_keys:
+        continue
+    if secret_pattern.search(key):
+        if value:
+            secret_name = key.lower().replace("_", "-")
+            app_secrets.append({"name": secret_name, "value": value})
+            app_env.append({"name": key, "secretRef": secret_name})
+    else:
+        app_env.append({"name": key, "value": value})
 
 params = {
     "location": location,
@@ -66,7 +78,7 @@ params = {
     "postgresAdminPassword": app["POSTGRES_PASSWORD"],
     "postgresDatabaseName": app.get("POSTGRES_MAIN_DATABASE", "minirag"),
     "appEnv": app_env,
-    "appSecrets": app_secrets,
+    "appSecrets": {"items": app_secrets},
     "metricsToken": app.get("METRICS_TOKEN") or secrets.token_hex(32),
 }
 

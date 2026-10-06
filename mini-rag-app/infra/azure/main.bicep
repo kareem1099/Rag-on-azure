@@ -32,12 +32,12 @@ param postgresSkuName string = 'Standard_B1ms'
 param postgresSkuTier string = 'Burstable'
 param postgresStorageSizeGB int = 32
 
-@description('Non-secret app settings from .env.app, values base64-encoded (POSTGRES_* connection keys are set here and ignored if present).')
-param appEnv object = {}
+@description('Container env entries from .env.app, built by deploy.sh: {name, value} or {name, secretRef}.')
+param appEnv array = []
 
 @secure()
-@description('Secret app settings from .env.app, values base64-encoded, e.g. GEMINI_API_KEY, COHERE_API_KEY, APP_API_KEY.')
-param appSecrets object = {}
+@description('Container app secrets from .env.app, built by deploy.sh: {name, value} (API keys etc.).')
+param appSecrets object
 
 @secure()
 @description('Bearer token required for /metrics (keeps it private now that nginx is gone).')
@@ -56,17 +56,6 @@ var postgresServerName = 'minirag-pg-${suffix}'
 var assetsShareName = 'minirag-assets'
 
 var apiAppName = 'minirag-api'
-
-// Keys owned by this template; values for them in appEnv/appSecrets are dropped.
-var managedKeys = [
-  'POSTGRES_HOST'
-  'POSTGRES_PORT'
-  'POSTGRES_USERNAME'
-  'POSTGRES_PASSWORD'
-  'POSTGRES_MAIN_DATABASE'
-  'POSTGRES_SSL'
-  'METRICS_TOKEN'
-]
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'minirag-logs-${suffix}'
@@ -235,23 +224,6 @@ var registries = [
   }
 ]
 
-var plainEnv = [for item in filter(items(appEnv), i => !contains(managedKeys, i.key)): {
-  name: item.key
-  value: base64ToString(item.value)
-}]
-
-var userSecrets = filter(items(appSecrets), i => !contains(managedKeys, i.key) && !empty(i.value))
-
-var userSecretValues = [for item in userSecrets: {
-  name: toLower(replace(item.key, '_', '-'))
-  value: base64ToString(item.value)
-}]
-
-var userSecretEnv = [for item in userSecrets: {
-  name: item.key
-  secretRef: toLower(replace(item.key, '_', '-'))
-}]
-
 var managedEnv = [
   { name: 'POSTGRES_HOST', value: postgres.properties.fullyQualifiedDomainName }
   { name: 'POSTGRES_PORT', value: '5432' }
@@ -288,7 +260,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
         allowInsecure: false
       }
       registries: registries
-      secrets: concat(userSecretValues, [
+      secrets: concat(appSecrets.items, [
         { name: 'postgres-password', value: postgresAdminPassword }
         { name: 'metrics-token', value: metricsToken }
       ])
@@ -302,7 +274,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
             cpu: json(apiCpu)
             memory: apiMemory
           }
-          env: concat(plainEnv, userSecretEnv, managedEnv)
+          env: concat(appEnv, managedEnv)
           volumeMounts: [
             {
               volumeName: 'assets'
