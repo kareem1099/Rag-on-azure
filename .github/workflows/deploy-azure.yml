@@ -1,11 +1,11 @@
 name: Deploy to Azure
 
-# Runs on push only once the repository variable AZURE_DEPLOY_ENABLED is "true"
-# (until then the self-hosted VM workflow in deploy.yml keeps deploying).
+# Runs on push only once the repository variable AZURE_DEPLOY_ENABLED is "true",
+# so pushes before the Azure setup is finished don't fail.
 on:
   push:
     branches:
-      - DALEL-EL-SHAB-ELMOSLEM
+      - main
   workflow_dispatch:
 
 concurrency:

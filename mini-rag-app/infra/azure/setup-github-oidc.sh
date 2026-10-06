@@ -7,8 +7,8 @@
 set -euo pipefail
 
 RESOURCE_GROUP="${1:?usage: setup-github-oidc.sh <resource-group> [owner/repo] [branch]}"
-REPO="${2:-kareem1099/alla-basera}"
-BRANCH="${3:-DALEL-EL-SHAB-ELMOSLEM}"
+REPO="${2:-kareem1099/rag-on-azure}"
+BRANCH="${3:-main}"
 APP_NAME="minirag-github-deploy"
 
 SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
@@ -45,5 +45,5 @@ Secrets:
 Variables:
   AZURE_RESOURCE_GROUP  = $RESOURCE_GROUP
   AZURE_ACR_NAME        = <printed at the end of deploy.sh>
-  AZURE_DEPLOY_ENABLED  = true    (switches pushes from the VM workflow to the Azure one)
+  AZURE_DEPLOY_ENABLED  = true    (turns on deploy-on-push)
 EOF

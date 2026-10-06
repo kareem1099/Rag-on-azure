@@ -12,7 +12,7 @@
 | `pgvector` container | Azure Database for PostgreSQL Flexible Server, `VECTOR` extension enabled |
 | `fastapi_data` volume | Azure Files share `minirag-assets` mounted at `/app/assets` |
 | `prometheus`, `grafana`, exporters, `cloudflared` | dropped to save credit: use the app's **Monitoring** blades (Azure Monitor / Log Analytics) |
-| self-hosted runner (`deploy.yml`) | GitHub-hosted runner + OIDC login (`deploy-azure.yml`) |
+| self-hosted runner | GitHub-hosted runner + OIDC login (`deploy-azure.yml`) |
 
 Why Postgres is a separate (billed) service here: on the VM the database container shared the machine
 you already paid for. Container Apps has no shared disk that is safe for a database, so the data lives
@@ -83,16 +83,16 @@ az containerapp revision restart -g minirag-rg -n minirag-api \
 ## 3. Deploy on every push (GitHub Actions)
 
 ```bash
-./infra/azure/setup-github-oidc.sh minirag-rg kareem1099/alla-basera DALEL-EL-SHAB-ELMOSLEM
+./infra/azure/setup-github-oidc.sh minirag-rg kareem1099/rag-on-azure main
 ```
 
 Then in GitHub → Settings → Secrets and variables → Actions add the secrets
 `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and the variables
 `AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`, `AZURE_DEPLOY_ENABLED=true`.
 
-With `AZURE_DEPLOY_ENABLED=true`, pushes to `DALEL-EL-SHAB-ELMOSLEM` run `deploy-azure.yml`
-(build the image in ACR, roll out a new revision, health check) and the old self-hosted
-`deploy.yml` is skipped. Delete the variable to switch back to the VM.
+With `AZURE_DEPLOY_ENABLED=true`, every push to `main` runs `deploy-azure.yml`
+(build the image in ACR, roll out a new revision, health check). You can also run it by hand
+from the Actions tab.
 
 ## Good to know
 
