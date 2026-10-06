@@ -35,18 +35,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build images in ACR
-        run: |
-          az acr build -r "$ACR_NAME" -t "minirag:$IMAGE_TAG" -f "$APP_DIR/docker/minirag/Dockerfile" "$APP_DIR"
-          az acr build -r "$ACR_NAME" -t "minirag-prometheus:$IMAGE_TAG" -f "$APP_DIR/docker/azure/prometheus/Dockerfile" "$APP_DIR"
-          az acr build -r "$ACR_NAME" -t "minirag-grafana:$IMAGE_TAG" -f "$APP_DIR/docker/azure/grafana/Dockerfile" "$APP_DIR"
+      - name: Build image in ACR
+        run: az acr build -r "$ACR_NAME" -t "minirag:$IMAGE_TAG" -f "$APP_DIR/docker/minirag/Dockerfile" "$APP_DIR"
 
-      - name: Roll out new revisions
+      - name: Roll out new revision
         run: |
           LOGIN_SERVER="$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)"
           az containerapp update -g "$RESOURCE_GROUP" -n minirag-api --image "$LOGIN_SERVER/minirag:$IMAGE_TAG" -o none
-          az containerapp update -g "$RESOURCE_GROUP" -n minirag-prometheus --image "$LOGIN_SERVER/minirag-prometheus:$IMAGE_TAG" -o none
-          az containerapp update -g "$RESOURCE_GROUP" -n minirag-grafana --image "$LOGIN_SERVER/minirag-grafana:$IMAGE_TAG" -o none
 
       - name: Wait for the app to be healthy
         run: |

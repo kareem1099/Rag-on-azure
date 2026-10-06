@@ -4,9 +4,9 @@
 # Usage:
 #   ./deploy.sh <resource-group> [location]
 #
-# Reads settings from ../../docker/env/.env.app and .env.grafana (same files the
-# docker compose setup uses; override with ENV_DIR=...). Safe to re-run: it rebuilds
-# the images and re-applies main.bicep. Day-to-day code deploys go through the
+# Reads settings from ../../docker/env/.env.app (the same file the docker compose
+# setup uses; override with ENV_DIR=...). Safe to re-run: it rebuilds the image
+# and re-applies main.bicep. Day-to-day code deploys go through the
 # GitHub Actions workflow instead (.github/workflows/deploy-azure.yml).
 set -euo pipefail
 
@@ -18,9 +18,7 @@ APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_DIR="${ENV_DIR:-$APP_DIR/docker/env}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
-for f in "$ENV_DIR/.env.app" "$ENV_DIR/.env.grafana"; do
-    [[ -f "$f" ]] || { echo "Missing $f (copy it from the matching .env.example.* and fill it in)"; exit 1; }
-done
+[[ -f "$ENV_DIR/.env.app" ]] || { echo "Missing $ENV_DIR/.env.app (copy it from .env.example.app and fill it in)"; exit 1; }
 
 command -v az >/dev/null || { echo "Azure CLI (az) is required: https://aka.ms/azure-cli"; exit 1; }
 az account show >/dev/null || { echo "Run 'az login' first"; exit 1; }
@@ -53,7 +51,6 @@ def read_env(path):
 
 
 app = read_env(f"{env_dir}/.env.app")
-grafana = read_env(f"{env_dir}/.env.grafana")
 
 secret_pattern = re.compile(r"_(KEY|PASSWORD|TOKEN|SECRET)$")
 app_env = {k: v for k, v in app.items() if not secret_pattern.search(k)}
@@ -68,8 +65,6 @@ params = {
     "appEnv": app_env,
     "appSecrets": app_secrets,
     "metricsToken": app.get("METRICS_TOKEN") or secrets.token_hex(32),
-    "grafanaAdminUser": grafana.get("GF_SECURITY_ADMIN_USER", "admin"),
-    "grafanaAdminPassword": grafana["GF_SECURITY_ADMIN_PASSWORD"],
 }
 
 print(json.dumps({
@@ -100,12 +95,10 @@ build_params false
 OUTPUTS="$(deploy)"
 ACR_NAME="$(output acrName)"
 
-echo "==> Building images in $ACR_NAME with tag $IMAGE_TAG"
+echo "==> Building image in $ACR_NAME with tag $IMAGE_TAG"
 az acr build -r "$ACR_NAME" -t "minirag:$IMAGE_TAG" -f "$APP_DIR/docker/minirag/Dockerfile" "$APP_DIR"
-az acr build -r "$ACR_NAME" -t "minirag-prometheus:$IMAGE_TAG" -f "$APP_DIR/docker/azure/prometheus/Dockerfile" "$APP_DIR"
-az acr build -r "$ACR_NAME" -t "minirag-grafana:$IMAGE_TAG" -f "$APP_DIR/docker/azure/grafana/Dockerfile" "$APP_DIR"
 
-echo "==> Container apps"
+echo "==> Container app"
 build_params true
 OUTPUTS="$(deploy)"
 
@@ -113,7 +106,6 @@ cat <<EOF
 
 Done.
   API:      $(output apiUrl)/api/v1/healthy
-  Grafana:  $(output grafanaUrl)
   Postgres: $(output postgresHost)
 
 For GitHub Actions set these repository variables:

@@ -1,13 +1,12 @@
 // MiniRAG on Azure Container Apps.
 //
 // Resources: Log Analytics, Container Registry, PostgreSQL Flexible Server (pgvector),
-// Storage (Azure Files for uploaded assets), Container Apps environment and three apps:
-//   minirag-api         FastAPI (public HTTPS)
-//   minirag-prometheus  Prometheus (internal only)
-//   minirag-grafana     Grafana (public HTTPS)
+// Storage (Azure Files for uploaded assets), Container Apps environment and one app:
+//   minirag-api   FastAPI (public HTTPS)
+// Monitoring uses the built-in Azure Monitor / Log Analytics (no Prometheus or Grafana, to keep costs low).
 //
-// Deployed by deploy.sh in two passes: deployApps=false creates the registry so images
-// can be built, then deployApps=true creates the container apps.
+// Deployed by deploy.sh in two passes: deployApps=false creates the registry so the image
+// can be built, then deployApps=true creates the container app.
 
 @description('Azure region for all resources.')
 param location string = resourceGroup().location
@@ -15,7 +14,7 @@ param location string = resourceGroup().location
 @description('Create the container apps. False on the first pass, before images exist in the registry.')
 param deployApps bool = true
 
-@description('Image tag to deploy for all three images.')
+@description('Image tag to deploy.')
 param imageTag string = 'latest'
 
 @description('PostgreSQL admin login. "postgres" is reserved on Azure.')
@@ -41,17 +40,13 @@ param appEnv object = {}
 param appSecrets object = {}
 
 @secure()
-@description('Bearer token Prometheus uses to scrape /metrics.')
+@description('Bearer token required for /metrics (keeps it private now that nginx is gone).')
 param metricsToken string
 
-param grafanaAdminUser string = 'admin'
-
-@secure()
-param grafanaAdminPassword string
-
-param apiCpu string = '1.0'
-param apiMemory string = '2Gi'
-param apiMinReplicas int = 1
+param apiCpu string = '0.5'
+param apiMemory string = '1Gi'
+@description('0 = scale to zero when idle (cheapest; the first request after a pause takes ~10-30 s).')
+param apiMinReplicas int = 0
 param apiMaxReplicas int = 1
 
 var suffix = uniqueString(resourceGroup().id)
@@ -61,8 +56,6 @@ var postgresServerName = 'minirag-pg-${suffix}'
 var assetsShareName = 'minirag-assets'
 
 var apiAppName = 'minirag-api'
-var prometheusAppName = 'minirag-prometheus'
-var grafanaAppName = 'minirag-grafana'
 
 // Keys owned by this template; values for them in appEnv/appSecrets are dropped.
 var managedKeys = [
@@ -358,124 +351,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
   ]
 }
 
-resource prometheusApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
-  name: prometheusAppName
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${pullIdentity.id}': {}
-    }
-  }
-  properties: {
-    environmentId: containerEnv.id
-    workloadProfileName: 'Consumption'
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: false
-        targetPort: 9090
-        transport: 'http'
-        allowInsecure: true
-      }
-      registries: registries
-      secrets: [
-        { name: 'metrics-token', value: metricsToken }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'prometheus'
-          image: '${acr.properties.loginServer}/minirag-prometheus:${imageTag}'
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-          env: [
-            { name: 'FASTAPI_HOST', value: apiApp!.properties.configuration.ingress.fqdn }
-          ]
-          volumeMounts: [
-            {
-              volumeName: 'secrets'
-              mountPath: '/etc/prometheus/secrets'
-            }
-          ]
-        }
-      ]
-      volumes: [
-        {
-          name: 'secrets'
-          storageType: 'Secret'
-          secrets: [
-            { secretRef: 'metrics-token', path: 'metrics-token' }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 1
-      }
-    }
-  }
-  dependsOn: [
-    acrPull
-  ]
-}
-
-resource grafanaApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
-  name: grafanaAppName
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${pullIdentity.id}': {}
-    }
-  }
-  properties: {
-    environmentId: containerEnv.id
-    workloadProfileName: 'Consumption'
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: true
-        targetPort: 3000
-        transport: 'auto'
-        allowInsecure: false
-      }
-      registries: registries
-      secrets: [
-        { name: 'grafana-admin-password', value: grafanaAdminPassword }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'grafana'
-          image: '${acr.properties.loginServer}/minirag-grafana:${imageTag}'
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-          env: [
-            { name: 'GF_SECURITY_ADMIN_USER', value: grafanaAdminUser }
-            { name: 'GF_SECURITY_ADMIN_PASSWORD', secretRef: 'grafana-admin-password' }
-            { name: 'GF_USERS_ALLOW_SIGN_UP', value: 'false' }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 1
-      }
-    }
-  }
-  dependsOn: [
-    acrPull
-    prometheusApp
-  ]
-}
-
 output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
 output postgresHost string = postgres.properties.fullyQualifiedDomainName
@@ -483,4 +358,3 @@ output postgresServerName string = postgres.name
 output storageAccountName string = storage.name
 output assetsShareName string = assetsShare.name
 output apiUrl string = deployApps ? 'https://${apiApp!.properties.configuration.ingress.fqdn}' : ''
-output grafanaUrl string = deployApps ? 'https://${grafanaApp!.properties.configuration.ingress.fqdn}' : ''
