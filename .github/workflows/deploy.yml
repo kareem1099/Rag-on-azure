@@ -12,6 +12,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Turned off once the repository variable AZURE_DEPLOY_ENABLED is "true" (see deploy-azure.yml).
+    if: vars.AZURE_DEPLOY_ENABLED != 'true'
     runs-on: self-hosted
     env:
       REPO_DIR: /home/github_user/workspace/mini-rag

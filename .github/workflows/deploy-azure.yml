@@ -1,0 +1,64 @@
+name: Deploy to Azure
+
+# Runs on push only once the repository variable AZURE_DEPLOY_ENABLED is "true"
+# (until then the self-hosted VM workflow in deploy.yml keeps deploying).
+on:
+  push:
+    branches:
+      - DALEL-EL-SHAB-ELMOSLEM
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: vars.AZURE_DEPLOY_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+      IMAGE_TAG: ${{ github.sha }}
+      APP_DIR: mini-rag-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build images in ACR
+        run: |
+          az acr build -r "$ACR_NAME" -t "minirag:$IMAGE_TAG" -f "$APP_DIR/docker/minirag/Dockerfile" "$APP_DIR"
+          az acr build -r "$ACR_NAME" -t "minirag-prometheus:$IMAGE_TAG" -f "$APP_DIR/docker/azure/prometheus/Dockerfile" "$APP_DIR"
+          az acr build -r "$ACR_NAME" -t "minirag-grafana:$IMAGE_TAG" -f "$APP_DIR/docker/azure/grafana/Dockerfile" "$APP_DIR"
+
+      - name: Roll out new revisions
+        run: |
+          LOGIN_SERVER="$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)"
+          az containerapp update -g "$RESOURCE_GROUP" -n minirag-api --image "$LOGIN_SERVER/minirag:$IMAGE_TAG" -o none
+          az containerapp update -g "$RESOURCE_GROUP" -n minirag-prometheus --image "$LOGIN_SERVER/minirag-prometheus:$IMAGE_TAG" -o none
+          az containerapp update -g "$RESOURCE_GROUP" -n minirag-grafana --image "$LOGIN_SERVER/minirag-grafana:$IMAGE_TAG" -o none
+
+      - name: Wait for the app to be healthy
+        run: |
+          FQDN="$(az containerapp show -g "$RESOURCE_GROUP" -n minirag-api --query properties.configuration.ingress.fqdn -o tsv)"
+          for i in $(seq 1 30); do
+            if curl -sf "https://$FQDN/api/v1/healthy"; then
+              echo
+              echo "App is healthy"
+              exit 0
+            fi
+            echo "Not ready yet, retrying in 10 seconds..."
+            sleep 10
+          done
+          az containerapp logs show -g "$RESOURCE_GROUP" -n minirag-api --tail 50 || true
+          exit 1

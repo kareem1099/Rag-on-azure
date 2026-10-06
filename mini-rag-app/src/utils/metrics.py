@@ -1,7 +1,9 @@
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware
+from helpers.config import get_settings, Settings
+import secrets
 import time
 
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP Requests", ["method", "endpoint", "status"])
@@ -43,7 +45,13 @@ def setup_metrics(app: FastAPI):
     app.add_middleware(PrometheusMiddleware)
 
     @app.get("/metrics", include_in_schema=False)
-    def metrics():
+    def metrics(request: Request, settings: Settings = Depends(get_settings)):
+        # When the app is exposed directly (no nginx in front), METRICS_TOKEN keeps /metrics private.
+        if settings.METRICS_TOKEN:
+            expected = f"Bearer {settings.METRICS_TOKEN}"
+            provided = request.headers.get("authorization", "")
+            if not secrets.compare_digest(provided.encode(), expected.encode()):
+                raise HTTPException(status_code=404, detail="Not Found")
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

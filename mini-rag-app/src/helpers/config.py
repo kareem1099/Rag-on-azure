@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     POSTGRES_SSL: bool = False
 
     APP_API_KEY: Optional[str] = None
+    METRICS_TOKEN: Optional[str] = None
 
     GENERATION_BACKEND: str
     EMBEDDING_BACKEND: str

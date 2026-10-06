@@ -1,6 +1,8 @@
 from logging.config import fileConfig
+from urllib.parse import quote_plus
+import os
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -27,6 +29,21 @@ target_metadata = SQLAlchemyBase.metadata
 # ... etc.
 
 
+def get_database_url() -> str:
+    """Prefer the app's POSTGRES_* env vars so the image needs no credentials in alembic.ini."""
+    host = os.getenv("POSTGRES_HOST")
+    if not host:
+        return config.get_main_option("sqlalchemy.url")
+
+    url = (
+        f"postgresql://{quote_plus(os.environ['POSTGRES_USERNAME'])}:{quote_plus(os.environ['POSTGRES_PASSWORD'])}"
+        f"@{host}:{os.getenv('POSTGRES_PORT', '5432')}/{os.environ['POSTGRES_MAIN_DATABASE']}"
+    )
+    if os.getenv("POSTGRES_SSL", "false").strip().lower() in ("1", "true", "yes", "on"):
+        url += "?sslmode=require"
+    return url
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -39,7 +56,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -58,11 +75,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(get_database_url(), poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(
