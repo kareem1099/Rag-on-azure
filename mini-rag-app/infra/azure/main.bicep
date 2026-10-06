@@ -1,7 +1,7 @@
 // MiniRAG on Azure Container Apps.
 //
 // Resources: Log Analytics, Container Registry, PostgreSQL Flexible Server (pgvector),
-// Storage (Azure Files for uploaded assets), Container Apps environment and one app:
+// Container Apps environment and one app:
 //   minirag-api   FastAPI (public HTTPS)
 // Monitoring uses the built-in Azure Monitor / Log Analytics (no Prometheus or Grafana, to keep costs low).
 //
@@ -51,9 +51,7 @@ param apiMaxReplicas int = 1
 
 var suffix = uniqueString(resourceGroup().id)
 var acrName = 'miniragacr${suffix}'
-var storageName = 'miniragst${take(suffix, 13)}'
 var postgresServerName = 'minirag-pg-${suffix}'
-var assetsShareName = 'minirag-assets'
 
 var apiAppName = 'minirag-api'
 
@@ -158,32 +156,6 @@ resource postgresAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallR
   ]
 }
 
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: storageName
-  location: location
-  kind: 'StorageV2'
-  sku: {
-    name: 'Standard_LRS'
-  }
-  properties: {
-    minimumTlsVersion: 'TLS1_2'
-    allowBlobPublicAccess: false
-  }
-}
-
-resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
-  parent: storage
-  name: 'default'
-}
-
-resource assetsShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
-  parent: fileService
-  name: assetsShareName
-  properties: {
-    shareQuota: 20
-  }
-}
-
 resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'minirag-env'
   location: location
@@ -201,19 +173,6 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
         workloadProfileType: 'Consumption'
       }
     ]
-  }
-}
-
-resource assetsStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
-  parent: containerEnv
-  name: 'assets'
-  properties: {
-    azureFile: {
-      accountName: storage.name
-      accountKey: storage.listKeys().keys[0].value
-      shareName: assetsShare.name
-      accessMode: 'ReadWrite'
-    }
   }
 }
 
@@ -268,6 +227,8 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
     template: {
       containers: [
         {
+          // Uploaded files live on the container disk only until they are processed into Postgres;
+          // the environment type here (express) does not support Azure Files mounts.
           name: 'fastapi'
           image: '${acr.properties.loginServer}/minirag:${imageTag}'
           resources: {
@@ -275,12 +236,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
             memory: apiMemory
           }
           env: concat(appEnv, managedEnv)
-          volumeMounts: [
-            {
-              volumeName: 'assets'
-              mountPath: '/app/assets'
-            }
-          ]
           probes: [
             {
               type: 'Startup'
@@ -304,13 +259,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           ]
         }
       ]
-      volumes: [
-        {
-          name: 'assets'
-          storageType: 'AzureFile'
-          storageName: assetsStorage.name
-        }
-      ]
       scale: {
         minReplicas: apiMinReplicas
         maxReplicas: apiMaxReplicas
@@ -327,6 +275,4 @@ output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
 output postgresHost string = postgres.properties.fullyQualifiedDomainName
 output postgresServerName string = postgres.name
-output storageAccountName string = storage.name
-output assetsShareName string = assetsShare.name
 output apiUrl string = deployApps ? 'https://${apiApp!.properties.configuration.ingress.fqdn}' : ''

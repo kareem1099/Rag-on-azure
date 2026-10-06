@@ -2,15 +2,15 @@
 
 ```
   users ── HTTPS ──▶  minirag-api (FastAPI, Container Apps, scales to zero)
-                          │ SSL                      │
-          PostgreSQL Flexible Server (pgvector)   Azure Files: /app/assets
+                          │ SSL
+          PostgreSQL Flexible Server (pgvector)
 ```
 
 | Old (VM / docker compose) | Azure |
 |---|---|
 | `fastapi` + `nginx` | `minirag-api` Container App (HTTPS ingress replaces nginx) |
 | `pgvector` container | Azure Database for PostgreSQL Flexible Server, `VECTOR` extension enabled |
-| `fastapi_data` volume | Azure Files share `minirag-assets` mounted at `/app/assets` |
+| `fastapi_data` volume | container disk only: uploaded files are kept until processed into Postgres (the express environment can't mount Azure Files) |
 | `prometheus`, `grafana`, exporters, `cloudflared` | dropped to save credit: use the app's **Monitoring** blades (Azure Monitor / Log Analytics) |
 | self-hosted runner | GitHub-hosted runner + OIDC login (`deploy-azure.yml`) |
 
@@ -69,16 +69,7 @@ pg_restore --no-owner --no-acl --clean --if-exists \
 az postgres flexible-server firewall-rule delete -g minirag-rg -n "$PG_SERVER" --rule-name migrate --yes
 ```
 
-Uploaded files (`/app/assets`) go to the file share:
-
-```bash
-docker run --rm -v docker_fastapi_data:/data -v "$PWD":/out alpine tar czf /out/assets.tgz -C /data .
-mkdir assets && tar xzf assets.tgz -C assets
-ST=$(az storage account list -g minirag-rg --query '[0].name' -o tsv)
-az storage file upload-batch --account-name "$ST" -d minirag-assets -s assets
-az containerapp revision restart -g minirag-rg -n minirag-api \
-  --revision $(az containerapp revision list -g minirag-rg -n minirag-api --query '[0].name' -o tsv)
-```
+Uploaded files don't need moving: once processed, their chunks are in Postgres.
 
 ## 3. Deploy on every push (GitHub Actions)
 
