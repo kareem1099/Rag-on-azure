@@ -32,11 +32,11 @@ param postgresSkuName string = 'Standard_B1ms'
 param postgresSkuTier string = 'Burstable'
 param postgresStorageSizeGB int = 32
 
-@description('Non-secret app settings from .env.app (POSTGRES_* connection keys are set here and ignored if present).')
+@description('Non-secret app settings from .env.app, values base64-encoded (POSTGRES_* connection keys are set here and ignored if present).')
 param appEnv object = {}
 
 @secure()
-@description('Secret app settings from .env.app, e.g. GEMINI_API_KEY, COHERE_API_KEY, APP_API_KEY.')
+@description('Secret app settings from .env.app, values base64-encoded, e.g. GEMINI_API_KEY, COHERE_API_KEY, APP_API_KEY.')
 param appSecrets object = {}
 
 @secure()
@@ -237,14 +237,14 @@ var registries = [
 
 var plainEnv = [for item in filter(items(appEnv), i => !contains(managedKeys, i.key)): {
   name: item.key
-  value: string(item.value)
+  value: base64ToString(item.value)
 }]
 
 var userSecrets = filter(items(appSecrets), i => !contains(managedKeys, i.key) && !empty(i.value))
 
 var userSecretValues = [for item in userSecrets: {
   name: toLower(replace(item.key, '_', '-'))
-  value: item.value
+  value: base64ToString(item.value)
 }]
 
 var userSecretEnv = [for item in userSecrets: {

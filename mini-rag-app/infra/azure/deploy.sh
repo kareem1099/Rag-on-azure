@@ -31,7 +31,7 @@ trap 'rm -f "$PARAMS_FILE"' EXIT
 build_params() {
     local deploy_apps="$1"
     python3 - "$ENV_DIR" "$deploy_apps" "$IMAGE_TAG" "$LOCATION" > "$PARAMS_FILE" <<'PY'
-import json, re, secrets, sys
+import base64, json, re, secrets, sys
 
 env_dir, deploy_apps, image_tag, location = sys.argv[1:5]
 
@@ -53,8 +53,11 @@ def read_env(path):
 app = read_env(f"{env_dir}/.env.app")
 
 secret_pattern = re.compile(r"_(KEY|PASSWORD|TOKEN|SECRET)$")
-app_env = {k: v for k, v in app.items() if not secret_pattern.search(k)}
-app_secrets = {k: v for k, v in app.items() if secret_pattern.search(k) and v}
+# Values are base64-encoded because ARM treats any string starting with "[" (e.g. the JSON list
+# in FILE_ALLOWED_EXTENSIONS) as a template expression; main.bicep decodes them.
+b64 = lambda v: base64.b64encode(v.encode("utf-8")).decode("ascii")
+app_env = {k: b64(v) for k, v in app.items() if not secret_pattern.search(k)}
+app_secrets = {k: b64(v) for k, v in app.items() if secret_pattern.search(k) and v}
 
 params = {
     "location": location,
