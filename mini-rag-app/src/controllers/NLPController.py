@@ -5,6 +5,7 @@ from stores.rerank.RerankEnums import RerankTargetEnums
 from helpers.arabic_text import build_keyword_query, normalize_arabic
 from utils.metrics import record_rag_answer
 from typing import List
+import asyncio
 import json
 import re
 
@@ -55,6 +56,12 @@ class NLPController(BaseController):
         collection_name = self.create_collection_name(project_id=project.project_id)
         return await self.vectordb_client.refresh_keyword_stats(collection_name=collection_name)
 
+    async def get_indexed_chunk_ids(self, project: Project) -> set:
+        collection_name = self.create_collection_name(project_id=project.project_id)
+        if not hasattr(self.vectordb_client, "get_indexed_chunk_ids"):
+            return set()
+        return await self.vectordb_client.get_indexed_chunk_ids(collection_name=collection_name)
+
     async def index_into_vector_db(self, project: Project, chunks: List[DataChunk],
                                    chunks_ids: List[int]):
 
@@ -63,7 +70,9 @@ class NLPController(BaseController):
         texts = [c.chunk_text for c in chunks]
         metadata = [c.chunk_metadata for c in chunks]
 
-        vectors = self.embedding_client.embed_text(
+        # Embedding can sleep on rate limits; keep it off the event loop so health probes still answer.
+        vectors = await asyncio.to_thread(
+            self.embedding_client.embed_text,
             text=texts,
             document_type=DocumentTypeEnum.DOCUMENT.value,
         )

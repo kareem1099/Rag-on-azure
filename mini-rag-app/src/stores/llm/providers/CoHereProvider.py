@@ -4,6 +4,7 @@ import cohere
 import httpx
 import logging
 import re
+import time
 
 
 class CoHereProvider(LLMInterface):
@@ -165,12 +166,25 @@ class CoHereProvider(LLMInterface):
         texts = text if isinstance(text, list) else [text]
         texts = [self.process_text(t) for t in texts]
 
-        response = self.client.embed(
-            model=self.embedding_model_id,
-            texts=texts,
-            input_type=input_type,
-            embedding_types=["float"],
-        )
+        # Trial keys are limited to 100k tokens/minute; wait out the window instead of failing.
+        max_attempts = 6
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self.client.embed(
+                    model=self.embedding_model_id,
+                    texts=texts,
+                    input_type=input_type,
+                    embedding_types=["float"],
+                )
+                break
+            except cohere.errors.TooManyRequestsError:
+                if attempt == max_attempts:
+                    self.logger.error("CoHere embedding rate limit still exceeded after %d attempts", attempt)
+                    return None
+                wait_seconds = min(15 * attempt, 60)
+                self.logger.warning("CoHere embedding rate limited, retrying in %ds (attempt %d/%d)",
+                                    wait_seconds, attempt, max_attempts)
+                time.sleep(wait_seconds)
 
         if not response or not response.embeddings or not response.embeddings.float:
             self.logger.error("Error while embedding text with CoHere")

@@ -48,6 +48,10 @@ async def index_project(request: Request, project_id: int, push_request: PushReq
         do_reset=bool(push_request.do_reset),
     )
 
+    # Without do_reset, chunks already in the collection are skipped, so a push that was cut
+    # off (e.g. by the ingress timeout) can simply be sent again to continue.
+    indexed_chunk_ids = await nlp_controller.get_indexed_chunk_ids(project=project)
+
     has_records = True
     page_no = 1
     inserted_items_count = 0
@@ -61,6 +65,10 @@ async def index_project(request: Request, project_id: int, push_request: PushReq
             break
 
         page_no += 1
+
+        page_chunks = [c for c in page_chunks if c.chunk_id not in indexed_chunk_ids]
+        if not page_chunks:
+            continue
 
         chunks_ids = [c.chunk_id for c in page_chunks]
 
