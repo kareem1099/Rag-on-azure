@@ -2,6 +2,7 @@ from ..LLMInterface import LLMInterface
 from ..LLMEnums import GeminiEnums
 import httpx
 import logging
+import time
 
 
 class GeminiProvider(LLMInterface):
@@ -12,11 +13,16 @@ class GeminiProvider(LLMInterface):
                  default_generation_max_output_tokens: int = 1000,
                  default_generation_temperature: float = 0.1,
                  thinking_budget: int = None,
-                 fallback_model_ids: list = None):
+                 fallback_model_ids: list = None,
+                 attempts_per_model: int = 3,
+                 total_timeout_seconds: float = 150):
 
         self.api_key = api_key
         self.thinking_budget = thinking_budget
         self.fallback_model_ids = fallback_model_ids or []
+        self.attempts_per_model = max(1, attempts_per_model)
+        # Leaves room for the Cohere fallback inside the ~240 s ingress timeout.
+        self.total_timeout_seconds = total_timeout_seconds
         self.api_url = api_url.rstrip("/")
 
         self.default_input_max_characters = default_input_max_characters
@@ -71,24 +77,12 @@ class GeminiProvider(LLMInterface):
             payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
         response_data, model_id = None, None
+        deadline = time.monotonic() + self.total_timeout_seconds
+
         for model_id in [self.generation_model_id, *self.fallback_model_ids]:
-            try:
-                with httpx.Client(timeout=180) as client:
-                    response = client.post(
-                        f"{self.api_url}/models/{model_id}:generateContent",
-                        headers={"x-goog-api-key": self.api_key},
-                        json=payload,
-                    )
-                    response.raise_for_status()
-                    response_data = response.json()
-                    break
-            except httpx.HTTPStatusError as error:
-                self.logger.error("Error while generating text with Gemini %s: %s %s",
-                                  model_id, error, error.response.text[:300])
-                if error.response.status_code not in (429, 500, 503):
-                    return None
-            except httpx.HTTPError as error:
-                self.logger.error("Error while generating text with Gemini %s: %s", model_id, error)
+            response_data = self.post_with_retries(model_id=model_id, payload=payload, deadline=deadline)
+            if response_data is not None or time.monotonic() >= deadline:
+                break
 
         if response_data is None:
             return None
@@ -106,6 +100,39 @@ class GeminiProvider(LLMInterface):
             return None
 
         return {"text": text, "finish_reason": candidate.get("finishReason"), "model": model_id}
+
+    def post_with_retries(self, model_id: str, payload: dict, deadline: float):
+        """Try one model up to attempts_per_model times; None means move on to the next model."""
+
+        for attempt in range(1, self.attempts_per_model + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                self.logger.error("Gemini time budget exhausted before %s attempt %d", model_id, attempt)
+                return None
+
+            try:
+                with httpx.Client(timeout=min(60, remaining)) as client:
+                    response = client.post(
+                        f"{self.api_url}/models/{model_id}:generateContent",
+                        headers={"x-goog-api-key": self.api_key},
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.HTTPStatusError as error:
+                self.logger.error("Gemini %s attempt %d/%d failed: %s %s", model_id, attempt,
+                                  self.attempts_per_model, error, error.response.text[:300])
+                if error.response.status_code not in (429, 500, 502, 503, 504):
+                    # Bad request, auth, unknown model: retrying the same model won't help.
+                    return None
+            except httpx.HTTPError as error:
+                self.logger.error("Gemini %s attempt %d/%d failed: %s", model_id, attempt,
+                                  self.attempts_per_model, error)
+
+            if attempt < self.attempts_per_model:
+                time.sleep(min(2 ** attempt, max(0, deadline - time.monotonic() - 1)))
+
+        return None
 
     def generate_text(self, prompt: str, chat_history: list = None,
                       max_output_tokens: int = None, temperature: float = None):

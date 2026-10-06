@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_THINKING_BUDGET: Optional[int] = None
     GEMINI_FALLBACK_MODELS: Optional[str] = None
+    GEMINI_ATTEMPTS_PER_MODEL: int = 3
+    GEMINI_TOTAL_TIMEOUT_SECONDS: float = 150
     GENERATION_FALLBACK_BACKEND: Optional[str] = None
     GENERATION_FALLBACK_MODEL_ID: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None

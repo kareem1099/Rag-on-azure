@@ -46,6 +46,8 @@ class LLMProviderFactory:
                     for model_id in (self.config.GEMINI_FALLBACK_MODELS or "").split(",")
                     if model_id.strip()
                 ],
+                attempts_per_model=self.config.GEMINI_ATTEMPTS_PER_MODEL,
+                total_timeout_seconds=self.config.GEMINI_TOTAL_TIMEOUT_SECONDS,
             )
 
         return None

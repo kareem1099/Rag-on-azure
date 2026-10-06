@@ -185,7 +185,7 @@ class NLPController(BaseController):
         system_prompt = self.template_parser.get("rag", "system_prompt")
 
         if getattr(self.generation_client, "supports_grounded_generation", False):
-            return self.answer_grounded(query=query, documents=retrieved_documents,
+            return await self.answer_grounded(query=query, documents=retrieved_documents,
                                         system_prompt=system_prompt)
 
         documents_prompts = "\n".join([
@@ -217,7 +217,7 @@ class NLPController(BaseController):
 
         return answer, full_prompt, chat_history, None
 
-    def answer_grounded(self, query: str, documents: List[RetrievedDocument], system_prompt: str):
+    async def answer_grounded(self, query: str, documents: List[RetrievedDocument], system_prompt: str):
 
         grounded_documents = [
             {
@@ -234,7 +234,9 @@ class NLPController(BaseController):
         for client in (self.generation_client, self.fallback_generation_client):
             if client is None:
                 continue
-            result = client.generate_grounded(
+            # Gemini retries with sleeps; keep it off the event loop so health probes still answer.
+            result = await asyncio.to_thread(
+                client.generate_grounded,
                 query=query,
                 documents=grounded_documents,
                 system_prompt=system_prompt,

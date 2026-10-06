@@ -21,6 +21,9 @@ GENERATION_MODEL_ID="gemini-3.8-flash"
 GEMINI_API_KEY="<gemini-key>"
 GEMINI_THINKING_BUDGET=2048
 GEMINI_FALLBACK_MODELS="gemini-3.7-flash,gemini-3.6-flash"
+# Each Gemini model is tried this many times before the next one; after all of them, Cohere answers.
+GEMINI_ATTEMPTS_PER_MODEL=3
+GEMINI_TOTAL_TIMEOUT_SECONDS=150
 GENERATION_FALLBACK_BACKEND="COHERE"
 GENERATION_FALLBACK_MODEL_ID="command-a-03-2025"
 
